@@ -2,6 +2,7 @@ import { Prisma, PrismaClientExtends } from "@prisma/client/extension";
 import { DefaultArgs } from "@prisma/client/runtime/library";
 
 import { Readable } from "node:stream";
+import type { ReadableStream } from "node:stream/web";
 
 export default Prisma.defineExtension(
   (client: PrismaClientExtends<DefaultArgs>) => {
@@ -11,23 +12,15 @@ export default Prisma.defineExtension(
           cursorStream<
             T,
             A extends Prisma.Args<T, "findMany"> | undefined,
-            R extends Prisma.Result<T, A, "findMany">[number],
-            C extends ((dataset: R[]) => Promise<unknown[]>) | undefined
+            R extends Prisma.Result<T, A, "findMany">[number]
           >(
             this: T,
             findManyArgs: A,
-            { batchSize, prefill, batchTransformer } = {} as {
+            { batchSize, prefill } = {} as {
               batchSize?: number;
               prefill?: number;
-              batchTransformer?: C;
             }
-          ): Iterable<
-            C extends Function
-              ? Awaited<ReturnType<C>>[number] extends object
-                ? Awaited<ReturnType<C>>[number]
-                : R
-              : R
-          > {
+          ): ReadableStream<R> {
             findManyArgs = findManyArgs ?? ({} as A);
             const context = Prisma.getExtensionContext(this);
 
@@ -56,10 +49,7 @@ export default Prisma.defineExtension(
                         }
                       : undefined,
                   });
-                  const transformedResults = batchTransformer
-                    ? await batchTransformer(results)
-                    : results;
-                  for (const result of transformedResults) {
+                  for (const result of results) {
                     this.push(result);
                   }
                   if (results.length < take) {
@@ -73,7 +63,7 @@ export default Prisma.defineExtension(
               },
             });
 
-            return readableStream as any;
+            return Readable.toWeb(readableStream);
           },
         },
       },
